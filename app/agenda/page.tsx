@@ -1,7 +1,7 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { loadData, saveData } from '@/storage'
+import { loadData, saveData } from '../storage'
 
 const NAV = [
   { href: '/dashboard', icon: '⚡', label: 'Inicio' },
@@ -57,10 +57,7 @@ export default function Agenda() {
   }
 
   const eliminarEvento = (id: number) => {
-    setEventos(prev => ({
-      ...prev,
-      [keyDia]: (prev[keyDia] || []).filter(ev => ev.id !== id)
-    }))
+    setEventos(prev => ({ ...prev, [keyDia]: (prev[keyDia] || []).filter(ev => ev.id !== id) }))
   }
 
   const mesAnterior = () => {

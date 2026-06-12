@@ -1,7 +1,7 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { loadData, saveData } from '@/storage'
+import { loadData, saveData } from '../storage'
 
 const NAV = [
   { href: '/dashboard', icon: '⚡', label: 'Inicio' },
@@ -44,12 +44,7 @@ export default function Habitos() {
   const toggle = (id: number) => setHabitos(prev => prev.map(h => {
     if (h.id !== id) return h
     const completando = !h.completadoHoy
-    return {
-      ...h,
-      completadoHoy: completando,
-      ultimaFecha: hoy,
-      racha: completando ? h.racha + 1 : Math.max(0, h.racha - 1)
-    }
+    return { ...h, completadoHoy: completando, ultimaFecha: hoy, racha: completando ? h.racha + 1 : Math.max(0, h.racha - 1) }
   }))
 
   const eliminar = (id: number) => setHabitos(prev => prev.filter(h => h.id !== id))

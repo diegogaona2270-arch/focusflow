@@ -1,7 +1,7 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { loadData, saveData } from '@/storage'
+import { loadData, saveData } from '../storage'
 
 const NAV = [
   { href: '/dashboard', icon: '⚡', label: 'Inicio' },
