@@ -1,282 +1,219 @@
-"use client";
-import { useState } from "react";
-import { Plus, Search, Trash2, Pencil, X, ArrowRight } from "lucide-react";
+'use client'
+import { useState, useEffect } from 'react'
+import { loadData, saveData } from '../storage'
 
+const NAV = [
+  { href: '/dashboard', icon: '⚡', label: 'Inicio' },
+  { href: '/tareas', icon: '✅', label: 'Tareas' },
+  { href: '/habitos', icon: '🔥', label: 'Hábitos' },
+  { href: '/agenda', icon: '📅', label: 'Agenda' },
+  { href: '/gastos', icon: '💰', label: 'Gastos' },
+]
+
+type Gasto = { id: number; amount: number; categoryId: string; description: string; date: string }
 const CATS = [
-  { id: "gym", name: "Gym", icon: "💪", color: "#f97316" },
-  { id: "comida", name: "Comida", icon: "🍔", color: "#ef4444" },
-  { id: "nafta", name: "Nafta", icon: "⛽", color: "#f59e0b" },
-  { id: "seguro", name: "Seguro", icon: "🛡️", color: "#6366f1" },
-  { id: "servicios", name: "Servicios", icon: "💡", color: "#0ea5e9" },
-  { id: "salud", name: "Salud", icon: "❤️", color: "#ec4899" },
-  { id: "transporte", name: "Transporte", icon: "🚗", color: "#8b5cf6" },
-  { id: "entretenimiento", name: "Entretenimiento", icon: "🎬", color: "#10b981" },
-  { id: "impuestos", name: "Impuestos", icon: "📋", color: "#6b7280" },
-  { id: "compras", name: "Compras", icon: "🛒", color: "#14b8a6" },
-  { id: "hogar", name: "Hogar", icon: "🏠", color: "#84cc16" },
-  { id: "educacion", name: "Educacion", icon: "📚", color: "#a855f7" },
-  { id: "otros", name: "Otros", icon: "📦", color: "#9ca3af" },
-];
+  { id: 'gym', icon: '💪', name: 'Gym' },
+  { id: 'food', icon: '🍔', name: 'Comida' },
+  { id: 'transport', icon: '🚗', name: 'Transporte' },
+  { id: 'work', icon: '💼', name: 'Trabajo' },
+  { id: 'health', icon: '🏥', name: 'Salud' },
+  { id: 'family', icon: '👨‍👩‍👧', name: 'Familia' },
+  { id: 'other', icon: '📦', name: 'Otros' },
+]
+const fmt = (n: number) => '$' + n.toLocaleString('es-AR')
+const today = () => new Date().toISOString().split('T')[0]
 
-function getCat(id: string) {
-  return CATS.find(c => c.id === id) || { id, name: id, icon: "📦", color: "#9ca3af" };
-}
-function fmt(n: number) { return "$" + Math.round(n).toLocaleString("es-AR"); }
-function getKey(uid: string) { return "ff_exp_" + uid; }
-function loadData(uid: string): any[] {
-  try { return JSON.parse(localStorage.getItem(getKey(uid)) || "[]"); }
-  catch { return []; }
-}
-function saveData(uid: string, data: any[]) {
-  localStorage.setItem(getKey(uid), JSON.stringify(data));
-}
+export default function Gastos() {
+  const [gastos, setGastos] = useState<Gasto[]>([])
+  const [listo, setListo] = useState(false)
+  const [showModal, setShowModal] = useState(false)
+  const [amount, setAmount] = useState('')
+  const [catId, setCatId] = useState('food')
+  const [desc, setDesc] = useState('')
+  const [date, setDate] = useState(today())
+  const [periodo, setPeriodo] = useState<'hoy' | 'semana' | 'mes' | 'año'>('mes')
+  const [tab, setTab] = useState<'resumen' | 'movimientos' | 'graficos'>('resumen')
 
-export default function GastosPage() {
-  const uid = "demo";
-  const [items, setItems] = useState<any[]>(() => loadData(uid));
-  const [tab, setTab] = useState("Resumen");
-  const [period, setPeriod] = useState("Mes");
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
-  const [search, setSearch] = useState("");
-  const [cat, setCat] = useState("");
+  useEffect(() => {
+    loadData<Gasto[]>('focusflow_gastos', []).then(data => { setGastos(data); setListo(true) })
+  }, [])
 
-  const today = new Date().toISOString().split("T")[0];
-  const wk = (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); return d.toISOString().split("T")[0]; })();
-  const mo = today.slice(0, 7) + "-01";
-  const yr = today.slice(0, 4) + "-01-01";
-  function sum(list: any[]) { return list.reduce((s: number, e: any) => s + e.amount, 0); }
+  useEffect(() => {
+    if (listo) saveData('focusflow_gastos', gastos)
+  }, [gastos, listo])
 
-  const totals: Record<string, number> = {
-    Hoy: sum(items.filter((e: any) => e.date === today)),
-    Semana: sum(items.filter((e: any) => e.date >= wk)),
-    Mes: sum(items.filter((e: any) => e.date >= mo)),
-    Año: sum(items.filter((e: any) => e.date >= yr)),
-  };
+  const now = new Date()
+  const filtrar = (g: Gasto) => {
+    const d = new Date(g.date)
+    if (periodo === 'hoy') return g.date === today()
+    if (periodo === 'semana') { const s = new Date(now); s.setDate(now.getDate() - 7); return d >= s }
+    if (periodo === 'mes') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+    return d.getFullYear() === now.getFullYear()
+  }
 
-  const moItems = items.filter((e: any) => e.date >= mo);
-  const moTotal = totals.Mes;
-  const day = new Date().getDate();
-  const daysInMo = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-  const avg = day > 0 ? moTotal / day : 0;
-  const proj = avg * daysInMo;
+  const filtrados = gastos.filter(filtrar)
+  const total = filtrados.reduce((s, g) => s + g.amount, 0)
+  const totalHoy = gastos.filter(g => g.date === today()).reduce((s, g) => s + g.amount, 0)
+  const totalSemana = gastos.filter(g => { const d = new Date(g.date); const s = new Date(now); s.setDate(now.getDate() - 7); return d >= s }).reduce((s, g) => s + g.amount, 0)
+  const totalMes = gastos.filter(g => { const d = new Date(g.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() }).reduce((s, g) => s + g.amount, 0)
+  const totalAnio = gastos.filter(g => new Date(g.date).getFullYear() === now.getFullYear()).reduce((s, g) => s + g.amount, 0)
+  const mayorCat = CATS.map(c => ({ ...c, total: gastos.filter(g => g.categoryId === c.id).reduce((s, g) => s + g.amount, 0) })).sort((a, b) => b.total - a.total)[0]
 
-  const byCat = CATS.map(c => ({ ...c, total: sum(moItems.filter((e: any) => e.categoryId === c.id)) }))
-    .filter(c => c.total > 0).sort((a, b) => b.total - a.total);
+  const guardar = () => {
+    const n = parseFloat(amount.replace(',', '.'))
+    if (!n || n <= 0) return
+    setGastos(prev => [...prev, { id: Date.now(), amount: n, categoryId: catId, description: desc, date }])
+    setAmount(''); setDesc(''); setDate(today()); setShowModal(false)
+  }
 
-  const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(); d.setMonth(d.getMonth() - (5 - i));
-    const ms = d.toISOString().slice(0, 7) + "-01";
-    const me = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
-    return { label: d.toLocaleDateString("es", { month: "short" }), total: sum(items.filter((e: any) => e.date >= ms && e.date <= me)) };
-  });
-  const maxMo = Math.max(...months.map(m => m.total), 1);
+  const eliminar = (id: number) => setGastos(prev => prev.filter(g => g.id !== id))
+  const cat = (id: string) => CATS.find(c => c.id === id) || CATS[6]
 
-  const filtered = items.filter((e: any) => {
-    if (cat && e.categoryId !== cat) return false;
-    if (search) { const q = search.toLowerCase(); return (e.description || "").toLowerCase().includes(q) || getCat(e.categoryId).name.toLowerCase().includes(q); }
-    return true;
-  });
-
-  function add(data: any) { const u = [{ id: Date.now().toString(), ...data }, ...items]; setItems(u); saveData(uid, u); }
-  function upd(id: string, data: any) { const u = items.map((e: any) => e.id === id ? { ...e, ...data } : e); setItems(u); saveData(uid, u); }
-  function del(id: string) { const u = items.filter((e: any) => e.id !== id); setItems(u); saveData(uid, u); }
-
-  const cs = (obj: any) => obj;
+  if (!listo) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f2f2f7' }}><p style={{ color: '#6057f1', fontWeight: 600 }}>Cargando...</p></div>
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--bg-app)" }}>
-      <div style={{ padding: "calc(env(safe-area-inset-top) + 12px) 16px 0 16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Gastos</h1>
-            <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>Control financiero</p>
-          </div>
-          <button onClick={() => { setEditing(null); setOpen(true); }} style={{ background: "#6057f1", width: 40, height: 40, borderRadius: 14, border: "none", cursor: "pointer", color: "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Plus size={20} />
-          </button>
-        </div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-          {["Hoy","Semana","Mes","Año"].map(p => (
-            <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, padding: "7px 0", borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: "pointer", border: period === p ? "1px solid #6057f1" : "1px solid var(--border)", background: period === p ? "#6057f1" : "var(--bg-card-2)", color: period === p ? "white" : "var(--text-secondary)" }}>{p}</button>
-          ))}
-        </div>
-        <div style={{ background: "linear-gradient(135deg,#6057f1,#4329ca)", borderRadius: 20, padding: 16, marginBottom: 12 }}>
-          <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, margin: "0 0 4px" }}>{period === "Hoy" ? "Hoy" : period === "Semana" ? "Esta semana" : period === "Mes" ? "Este mes" : "Este año"}</p>
-          <p style={{ color: "white", fontSize: 30, fontWeight: 700, margin: 0 }}>{fmt(totals[period])}</p>
-          {period === "Mes" && <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, margin: "6px 0 0" }}>Prom. dia: {fmt(avg)} · Proyeccion: {fmt(proj)}</p>}
-        </div>
-        <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-          {["Resumen","Movimientos","Graficos"].map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "8px 0", borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: "pointer", border: tab === t ? "1px solid #6057f1" : "1px solid var(--border)", background: tab === t ? "var(--bg-card)" : "var(--bg-card-2)", color: tab === t ? "var(--text-primary)" : "var(--text-secondary)" }}>{t}</button>
-          ))}
-        </div>
-      </div>
+    <div style={{ background: '#f2f2f7', minHeight: '100vh' }}>
+      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, background: 'white', borderBottom: '1px solid rgba(0,0,0,0.08)', display: 'flex', paddingTop: 'env(safe-area-inset-top)', zIndex: 100 }}>
+        {NAV.map(n => (
+          <a key={n.href} href={n.href} style={{ flex: 1, padding: '10px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, textDecoration: 'none' }}>
+            <span style={{ fontSize: 22 }}>{n.icon}</span>
+            <span style={{ fontSize: 10, color: n.href === '/gastos' ? '#6057f1' : '#8e8e93', fontWeight: n.href === '/gastos' ? 700 : 400 }}>{n.label}</span>
+          </a>
+        ))}
+      </nav>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 96px" }}>
-        {tab === "Resumen" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {(["Hoy","Semana","Mes","Año"] as const).map((p, i) => (
-                <div key={p} style={{ background: "var(--bg-card)", borderRadius: 16, padding: 14, border: "1px solid var(--border)" }}>
-                  <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: "0 0 4px" }}>{p}</p>
-                  <p style={{ fontSize: 18, fontWeight: 700, margin: 0, color: ["#6057f1","#0ea5e9","#f59e0b","#10b981"][i] }}>{fmt(totals[p])}</p>
-                </div>
-              ))}
+      <div style={{ paddingTop: 80 }}>
+        <div style={{ background: '#f2f2f7', padding: '16px 20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+            <div>
+              <h1 style={{ fontSize: 32, fontWeight: 700, color: '#1c1c1e' }}>Gastos</h1>
+              <p style={{ color: '#8e8e93', fontSize: 14 }}>Control financiero</p>
             </div>
-            {byCat[0] && (
-              <div style={{ background: "var(--bg-card)", borderRadius: 16, padding: 14, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 14, background: byCat[0].color + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{byCat[0].icon}</div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: 0 }}>Mayor gasto este mes</p>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>{byCat[0].name}</p>
-                </div>
-                <p style={{ fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>{fmt(byCat[0].total)}</p>
-              </div>
-            )}
-            {items.length === 0 ? (
-              <div style={{ background: "var(--bg-card)", borderRadius: 16, padding: 40, textAlign: "center", border: "1px solid var(--border)" }}>
-                <p style={{ fontSize: 36, margin: "0 0 8px" }}>💸</p>
-                <p style={{ fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px" }}>Sin gastos</p>
-                <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "0 0 16px" }}>Registra tu primer gasto</p>
-                <button onClick={() => setOpen(true)} style={{ background: "#6057f1", color: "white", border: "none", borderRadius: 12, padding: "10px 20px", fontWeight: 600, cursor: "pointer" }}>Registrar gasto</button>
-              </div>
-            ) : items.slice(0, 6).map((e: any) => (
-              <Row key={e.id} expense={e} onEdit={() => { setEditing(e); setOpen(true); }} onDelete={() => del(e.id)} />
+            <button onClick={() => setShowModal(true)} style={{ background: '#6057f1', color: 'white', border: 'none', borderRadius: 16, width: 48, height: 48, fontSize: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['hoy','semana','mes','año'] as const).map(p => (
+              <button key={p} onClick={() => setPeriodo(p)} style={{ flex: 1, padding: '8px 0', borderRadius: 20, border: 'none', background: periodo === p ? '#6057f1' : 'white', color: periodo === p ? 'white' : '#1c1c1e', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </button>
             ))}
           </div>
-        )}
-
-        {tab === "Movimientos" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ position: "relative" }}>
-              <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }} />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." style={{ width: "100%", background: "var(--bg-card-2)", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 12px 10px 34px", fontSize: 14, color: "var(--text-primary)", outline: "none", boxSizing: "border-box" }} />
-            </div>
-            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-              <button onClick={() => setCat("")} style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, border: !cat ? "1px solid #6057f1" : "1px solid var(--border)", background: !cat ? "#6057f1" : "var(--bg-card-2)", color: !cat ? "white" : "var(--text-secondary)", whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0 }}>Todas</button>
-              {CATS.map(c => (
-                <button key={c.id} onClick={() => setCat(cat === c.id ? "" : c.id)} style={{ padding: "6px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600, border: "1px solid var(--border)", background: cat === c.id ? c.color : "var(--bg-card-2)", color: cat === c.id ? "white" : "var(--text-secondary)", whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0 }}>{c.icon} {c.name}</button>
-              ))}
-            </div>
-            {filtered.map((e: any) => <Row key={e.id} expense={e} onEdit={() => { setEditing(e); setOpen(true); }} onDelete={() => del(e.id)} />)}
-          </div>
-        )}
-
-        {tab === "Graficos" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ background: "var(--bg-card)", borderRadius: 16, padding: 16, border: "1px solid var(--border)" }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", margin: "0 0 16px" }}>Ultimos 6 meses</p>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 80 }}>
-                {months.map((m, i) => (
-                  <div key={m.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                    <div style={{ width: "100%", borderRadius: "4px 4px 0 0", background: i === 5 ? "#6057f1" : "#6057f120", height: Math.max(4, (m.total / maxMo) * 64) }} />
-                    <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>{m.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ background: "var(--bg-card)", borderRadius: 16, padding: 16, border: "1px solid var(--border)" }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", margin: "0 0 16px" }}>Por categoria</p>
-              {byCat.length === 0 ? <p style={{ color: "var(--text-secondary)", fontSize: 13, textAlign: "center" }}>Sin datos</p> : byCat.map(c => (
-                <div key={c.id} style={{ marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, color: "var(--text-primary)" }}>{c.icon} {c.name}</span>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{moTotal > 0 ? Math.round(c.total / moTotal * 100) : 0}%</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{fmt(c.total)}</span>
-                    </div>
-                  </div>
-                  <div style={{ height: 6, background: "var(--bg-card-2)", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", background: c.color, width: (moTotal > 0 ? (c.total / moTotal * 100) : 0) + "%", borderRadius: 99 }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ background: "var(--bg-card)", borderRadius: 16, padding: 16, border: "1px solid var(--border)" }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", margin: "0 0 12px" }}>Proyeccion del mes</p>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div>
-                  <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: 0 }}>Hasta hoy</p>
-                  <p style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>{fmt(moTotal)}</p>
-                </div>
-                <ArrowRight size={18} color="var(--text-tertiary)" />
-                <div style={{ textAlign: "right" }}>
-                  <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: 0 }}>Fin de mes</p>
-                  <p style={{ fontSize: 18, fontWeight: 700, color: "#f59e0b", margin: 0 }}>{fmt(proj)}</p>
-                </div>
-              </div>
-              <div style={{ height: 8, background: "var(--bg-card-2)", borderRadius: 99, overflow: "hidden" }}>
-                <div style={{ height: "100%", background: "#6057f1", width: Math.min(100, proj > 0 ? (moTotal / proj * 100) : 0) + "%", borderRadius: 99 }} />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {open && <Form initial={editing} onClose={() => { setOpen(false); setEditing(null); }} onSave={(data: any) => { editing ? upd(editing.id, data) : add(data); setOpen(false); setEditing(null); }} />}
-    </div>
-  );
-}
-
-function Row({ expense, onEdit, onDelete }: any) {
-  const cat = getCat(expense.categoryId);
-  const [show, setShow] = useState(false);
-  return (
-    <div onClick={() => setShow(v => !v)} style={{ background: "var(--bg-card)", borderRadius: 16, padding: 14, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
-      <div style={{ width: 40, height: 40, borderRadius: 12, background: cat.color + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{cat.icon}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{expense.description || cat.name}</p>
-        <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>{cat.name} · {expense.date}</p>
-      </div>
-      <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>{fmt(expense.amount)}</p>
-        {show && (
-          <div style={{ display: "flex", gap: 4, marginTop: 4, justifyContent: "flex-end" }}>
-            <button onClick={(e) => { e.stopPropagation(); onEdit(); }} style={{ padding: 6, borderRadius: 8, background: "var(--bg-card-2)", border: "none", cursor: "pointer" }}><Pencil size={12} /></button>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} style={{ padding: 6, borderRadius: 8, background: "#fee2e2", border: "none", cursor: "pointer", color: "#ef4444" }}><Trash2 size={12} /></button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Form({ initial, onClose, onSave }: any) {
-  const [amount, setAmount] = useState(initial ? initial.amount.toString() : "");
-  const [catId, setCatId] = useState(initial ? initial.categoryId : CATS[0].id);
-  const [desc, setDesc] = useState(initial ? (initial.description || "") : "");
-  const [date, setDate] = useState(initial ? initial.date : new Date().toISOString().split("T")[0]);
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50 }}>
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} onClick={onClose} />
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "var(--bg-card)", borderRadius: "24px 24px 0 0", padding: "0 20px", paddingBottom: "calc(32px + env(safe-area-inset-bottom))" }}>
-        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12, paddingBottom: 4 }}>
-          <div style={{ width: 40, height: 4, borderRadius: 99, background: "var(--border)" }} />
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>{initial ? "Editar gasto" : "Nuevo gasto"}</h2>
-          <button onClick={onClose} style={{ padding: 8, borderRadius: 99, background: "var(--bg-card-2)", border: "none", cursor: "pointer" }}><X size={16} /></button>
+
+        <div style={{ margin: '0 20px 20px', background: 'linear-gradient(135deg, #6057f1, #4c46d6)', borderRadius: 24, padding: '24px' }}>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, marginBottom: 8 }}>{periodo.charAt(0).toUpperCase() + periodo.slice(1)}</p>
+          <p style={{ color: 'white', fontSize: 42, fontWeight: 700 }}>{fmt(total)}</p>
         </div>
-        <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 6px" }}>Monto</p>
-        <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" autoFocus inputMode="decimal" style={{ width: "100%", background: "var(--bg-card-2)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", fontSize: 22, fontWeight: 700, color: "var(--text-primary)", outline: "none", boxSizing: "border-box", marginBottom: 16 }} />
-        <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 8px" }}>Categoria</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6, marginBottom: 16 }}>
-          {CATS.map(c => (
-            <button key={c.id} onClick={() => setCatId(c.id)} style={{ padding: "8px 4px", borderRadius: 12, border: "1px solid var(--border)", background: catId === c.id ? c.color : "var(--bg-card-2)", color: catId === c.id ? "white" : "var(--text-secondary)", fontSize: 11, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <span style={{ fontSize: 16 }}>{c.icon}</span>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%", textAlign: "center" }}>{c.name}</span>
+
+        <div style={{ margin: '0 20px 20px', display: 'flex', background: 'white', borderRadius: 16, padding: 4 }}>
+          {(['resumen','movimientos','graficos'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', background: tab === t ? '#f2f2f7' : 'none', color: '#1c1c1e', fontSize: 13, fontWeight: tab === t ? 700 : 400, cursor: 'pointer' }}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
-        <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 6px" }}>Fecha</p>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ width: "100%", background: "var(--bg-card-2)", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 12px", fontSize: 14, color: "var(--text-primary)", outline: "none", boxSizing: "border-box", marginBottom: 16 }} />
-        <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 6px" }}>Descripcion (opcional)</p>
-        <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ej: Almuerzo con cliente" style={{ width: "100%", background: "var(--bg-card-2)", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 12px", fontSize: 14, color: "var(--text-primary)", outline: "none", boxSizing: "border-box", marginBottom: 20 }} />
-        <button onClick={() => { const n = parseFloat(amount.replace(",",".")); if (!n || n <= 0) return; onSave({ amount: n, categoryId: catId, description: desc || undefined, date }); }} disabled={!amount} style={{ width: "100%", background: "#6057f1", color: "white", border: "none", borderRadius: 14, padding: 16, fontSize: 15, fontWeight: 700, cursor: "pointer", opacity: amount ? 1 : 0.4 }}>
-          {initial ? "Guardar cambios" : "Registrar gasto"}
-        </button>
+
+        <div style={{ padding: '0 20px 40px' }}>
+          {tab === 'resumen' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                {[['Hoy', totalHoy, '#6057f1'], ['Semana', totalSemana, '#00c7be'], ['Mes', totalMes, '#ff9500'], ['Año', totalAnio, '#34c759']].map(([l, v, c]) => (
+                  <div key={l as string} style={{ background: 'white', borderRadius: 16, padding: '16px' }}>
+                    <p style={{ fontSize: 13, color: '#8e8e93', marginBottom: 4 }}>{l}</p>
+                    <p style={{ fontSize: 22, fontWeight: 700, color: c as string }}>{fmt(v as number)}</p>
+                  </div>
+                ))}
+              </div>
+              {mayorCat && mayorCat.total > 0 && (
+                <div style={{ background: 'white', borderRadius: 16, padding: '16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 14, background: '#fff3e0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{mayorCat.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 12, color: '#8e8e93' }}>Mayor gasto este mes</p>
+                    <p style={{ fontWeight: 700, fontSize: 15 }}>{mayorCat.name}</p>
+                  </div>
+                  <p style={{ fontWeight: 700, fontSize: 16 }}>{fmt(mayorCat.total)}</p>
+                </div>
+              )}
+              {gastos.length === 0 && <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}><div style={{ fontSize: 48, marginBottom: 8 }}>💸</div><p>Sin gastos registrados</p></div>}
+              {gastos.slice(-5).reverse().map(g => (
+                <div key={g.id} style={{ background: 'white', borderRadius: 16, padding: '16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 14, background: '#fff3e0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{cat(g.categoryId).icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: 600, fontSize: 15 }}>{g.description || cat(g.categoryId).name}</p>
+                    <p style={{ fontSize: 12, color: '#8e8e93' }}>{cat(g.categoryId).name} · {g.date}</p>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    <p style={{ fontWeight: 700, fontSize: 16 }}>{fmt(g.amount)}</p>
+                    <button onClick={() => eliminar(g.id)} style={{ background: 'none', border: 'none', color: '#ff3b30', fontSize: 14, cursor: 'pointer' }}>🗑</button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+          {tab === 'movimientos' && (
+            filtrados.length === 0
+              ? <div style={{ textAlign: 'center', padding: '60px 0', color: '#8e8e93' }}><div style={{ fontSize: 48, marginBottom: 12 }}>💸</div><p>Sin movimientos en este período</p></div>
+              : filtrados.slice().reverse().map(g => (
+                <div key={g.id} style={{ background: 'white', borderRadius: 16, padding: '16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 14, background: '#fff3e0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{cat(g.categoryId).icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: 600, fontSize: 15 }}>{g.description || cat(g.categoryId).name}</p>
+                    <p style={{ fontSize: 12, color: '#8e8e93' }}>{cat(g.categoryId).name} · {g.date}</p>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    <p style={{ fontWeight: 700, fontSize: 16, color: '#ff3b30' }}>-{fmt(g.amount)}</p>
+                    <button onClick={() => eliminar(g.id)} style={{ background: 'none', border: 'none', color: '#ff3b30', fontSize: 14, cursor: 'pointer' }}>🗑</button>
+                  </div>
+                </div>
+              ))
+          )}
+          {tab === 'graficos' && (
+            <div style={{ background: 'white', borderRadius: 20, padding: '20px' }}>
+              <h3 style={{ fontWeight: 700, marginBottom: 16 }}>Por categoría</h3>
+              {CATS.map(c => {
+                const t = gastos.filter(g => g.categoryId === c.id).reduce((s, g) => s + g.amount, 0)
+                if (!t) return null
+                const pct = totalAnio > 0 ? (t / totalAnio) * 100 : 0
+                return (
+                  <div key={c.id} style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 14 }}>{c.icon} {c.name}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600 }}>{fmt(t)}</span>
+                    </div>
+                    <div style={{ background: '#f2f2f7', borderRadius: 6, height: 8 }}>
+                      <div style={{ width: `${pct}%`, background: '#6057f1', borderRadius: 6, height: 8 }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
+
+      {showModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+          <div onClick={() => setShowModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#1c1c2e', borderRadius: '24px 24px 0 0', padding: '24px 20px 50px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 2, margin: '0 auto 20px' }} />
+            <h3 style={{ color: 'white', fontSize: 18, fontWeight: 700, marginBottom: 20 }}>Registrar gasto</h3>
+            <input value={amount} onChange={e => setAmount(e.target.value)} placeholder="Monto" type="number" style={{ width: '100%', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, padding: '14px 16px', color: 'white', fontSize: 28, fontWeight: 700, marginBottom: 16, boxSizing: 'border-box' }} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 16 }}>
+              {CATS.map(c => (
+                <button key={c.id} onClick={() => setCatId(c.id)} style={{ padding: '10px 4px', borderRadius: 12, border: catId === c.id ? '2px solid #6057f1' : '2px solid transparent', background: 'rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 22 }}>{c.icon}</span>
+                  <span style={{ fontSize: 10, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>{c.name}</span>
+                </button>
+              ))}
+            </div>
+            <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Descripción (opcional)" style={{ width: '100%', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, padding: '12px', color: 'white', fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }} />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ width: '100%', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, padding: '12px', color: 'white', fontSize: 14, marginBottom: 20, boxSizing: 'border-box' }} />
+            <button onClick={guardar} disabled={!amount} style={{ width: '100%', background: '#6057f1', color: 'white', border: 'none', borderRadius: 14, padding: 18, fontSize: 16, fontWeight: 700, cursor: amount ? 'pointer' : 'not-allowed', opacity: amount ? 1 : 0.4 }}>
+              Registrar gasto
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-  );
+  )
 }
